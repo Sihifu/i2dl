@@ -1,0 +1,5 @@
+a) cmd+ shift+p and then launch tensorboard does not work if the default port (6006) is already occupied
+b) closing the tab in VS code does not kill the port unfortunately
+c) to kill the port do
+    c1) lsof -i :6006
+    c2) kill -9 $PID
