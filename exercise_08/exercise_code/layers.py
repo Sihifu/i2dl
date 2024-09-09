@@ -108,8 +108,18 @@ def batchnorm_backward(dout, cache):
     ########################################################################
     # TODO: Implement the backward pass for batch normalization.           #
     ########################################################################
+    out, x_norm, beta, gamma, x_minus_mean, ivar, sqrtvar, var, eps = cache
+    N=x_norm.shape[0]
+    d_x_minus_mu=dout*+np.sum(dout,axis=0).reshape((1,-1))*(-1/N)
+    denom=ivar.reshape((1,-1))**2
+    term2=x_minus_mean*ivar.reshape((1,-1))*2*d_x_minus_mu
 
-    pass
+    dx=gamma*((d_x_minus_mu*sqrtvar.reshape((1,-1))-term2)/denom)
+
+    dgamma = np.sum(x_norm * dout,axis=0)
+    dbeta = np.sum(dout,axis=0)
+
+    
 
     ########################################################################
     #                           END OF YOUR CODE                           #

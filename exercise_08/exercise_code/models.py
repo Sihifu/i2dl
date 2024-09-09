@@ -2,6 +2,27 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+
+class TransformerBlock(nn.Module):
+    def __init__(self, hparams):
+        super().__init__()
+        self.hparams=hparams
+        n_hidden=hparams["n_hidden"]
+        if hparams["batch_norm"]:
+            self.norm=nn.BatchNorm1d(n_hidden)
+        elif hparams["layer_norm"]:
+            self.norm=nn.LayerNorm(n_hidden)
+        else:
+            self.norm=nn.Identity()
+        self.ff=nn.Sequential(self.norm,nn.Linear(n_hidden,4 *n_hidden),nn.GELU(),nn.Linear(4*n_hidden,n_hidden))
+
+    def forward(self, x):
+        # Shortcut connection for attention block
+        shortcut = x
+        x = self.ff(x)
+        if self.hparams["shortcut"]:
+            x = x + shortcut  # Add the original input back
+        return x
 class Encoder(nn.Module):
 
     def __init__(self, hparams, input_size=28 * 28, latent_dim=20):
@@ -30,15 +51,40 @@ class Encoder(nn.Module):
         ########################################################################
 
 
-        pass
+        if  hparams["batch_norm"] or hparams["layer_norm"]:
+            assert hparams["batch_norm"] != hparams["layer_norm"], "For mlp normalization either batch_norm or layer_norm must be true"
 
+        if hparams["num_layers"]==0:
+            if hparams["batch_norm"]:
+                self.norm=nn.BatchNorm1d(hparams["input_size"])
+            elif hparams["layer_norm"]:
+                self.norm=nn.LayerNorm(hparams["input_size"])
+            else:
+                self.norm=nn.Identity()
+            self.encoder=nn.Sequential(self.norm,nn.Linear(hparams["input_size"],hparams["latent_dim"]),nn.GELU())
+            return 
+        
+        self.up=nn.Linear(hparams["input_size"],hparams["n_hidden"])
+        self.trf_blocks = nn.Sequential(
+            *[TransformerBlock(hparams) for _ in range(hparams["num_layers"])])
+        if hparams["batch_norm"]:
+            self.norm_out=nn.BatchNorm1d(hparams["n_hidden"])
+        elif hparams["layer_norm"]:
+            self.norm_out=nn.LayerNorm(hparams["n_hidden"])
+        else:
+            self.norm_out=nn.Identity()
+
+        self.down=nn.Sequential(self.norm_out,nn.Linear(hparams["n_hidden"],hparams["latent_dim"]))
+        self.encoder=nn.Sequential(self.up,self.trf_blocks,self.down)
         ########################################################################
         #                           END OF YOUR CODE                           #
         ########################################################################
 
     def forward(self, x):
         # feed x into encoder!
-        return self.encoder(x)
+        x=self.encoder(x)
+        return x
+    
 
 class Decoder(nn.Module):
 
@@ -54,7 +100,31 @@ class Decoder(nn.Module):
         ########################################################################
 
 
-        pass
+        if  hparams["batch_norm"] or hparams["layer_norm"]:
+            assert hparams["batch_norm"] != hparams["layer_norm"], "For mlp normalization either batch_norm or layer_norm must be true"
+
+        if hparams["num_layers"]==0:
+            if hparams["batch_norm"]:
+                self.norm=nn.BatchNorm1d(hparams["latent_dim"])
+            elif hparams["layer_norm"]:
+                self.norm=nn.LayerNorm(hparams["latent_dim"])
+            else:
+                self.norm=nn.Identity()
+            self.decoder=nn.Sequential(self.norm,nn.Linear(hparams["latent_dim"],hparams["latent_dim"]))
+            return
+        
+        self.up=nn.Linear(hparams["latent_dim"],hparams["n_hidden"])
+        self.trf_blocks = nn.Sequential(
+            *[TransformerBlock(hparams) for _ in range(hparams["num_layers"])])
+        if hparams["batch_norm"]:
+            self.norm_out=nn.BatchNorm1d(hparams["n_hidden"])
+        elif hparams["layer_norm"]:
+            self.norm_out=nn.LayerNorm(hparams["n_hidden"])
+        else:
+            self.norm_out=nn.Identity()
+
+        self.down=nn.Sequential(self.norm_out,nn.Linear(hparams["n_hidden"],hparams["output_dim"]))
+        self.decoder=nn.Sequential(self.up,self.trf_blocks,self.down)
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -85,7 +155,8 @@ class Autoencoder(nn.Module):
         #  of the input.                                                       #
         ########################################################################
 
-        pass
+        latent=self.encoder(x)
+        reconstruction=self.decoder(latent)
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -99,7 +170,10 @@ class Autoencoder(nn.Module):
         # TODO: Define your optimizer.                                         #
         ########################################################################
 
-        pass
+        optimizer=getattr(torch.optim, self.hparams["optimizer"].capitalize())
+        optim_params = optimizer.__init__.__code__.co_varnames[:optimizer.__init__.__code__.co_argcount]
+        parsed_arguments={ key: value for key,value in self.hparams.items() if key in optim_params}
+        self.optimizer=optimizer(self.parameters(), **parsed_arguments)
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -129,9 +203,17 @@ class Autoencoder(nn.Module):
         # Hint 4:                                                              #
         # Don't forget to move the data to the correct device!                 #                                     
         ########################################################################
-
-
-        pass
+        images= batch # Get the images and labels from the batch, in the fashion we defined in the dataset and dataloader.
+        images= images.to(self.hparams["device"]) # Send the data to the device (GPU or CPU) - it has to be the same device as the model.
+        images = images.view(images.shape[0], -1) 
+        self.train()
+        self.optimizer.zero_grad()
+        pred=self.forward(images)
+        loss = loss_func(pred, images, self)
+        loss.backward()
+        self.optimizer.step()
+        loss=loss_func.compute_loss_without_regularization(pred, images)
+        
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -154,8 +236,13 @@ class Autoencoder(nn.Module):
         # from the notebook.                                                   #
         ########################################################################
 
-
-        pass
+        self.eval()
+        with torch.no_grad():
+            images= batch # Get the images and labels from the batch, in the fashion we defined in the dataset and dataloader.
+            images= images.to(self.hparams["device"]) # Send the data to the device (GPU or CPU) - it has to be the same device as the model.
+            images = images.view(images.shape[0], -1) 
+            pred=self.forward(images)
+            loss = loss_func.compute_loss_without_regularization(pred, images)
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -198,8 +285,7 @@ class Classifier(nn.Module):
         # block of fully connected layers.                                     #                                                             
         ########################################################################
 
-
-        pass
+        self.model = nn.Sequential(nn.Linear(hparams["latent_dim"] ,(hparams["num_classes"])))
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -220,8 +306,10 @@ class Classifier(nn.Module):
         # and the relevant learning rate (from self.hparams)                   #
         ########################################################################
 
+        adam_params = torch.optim.Adam.__init__.__code__.co_varnames[:torch.optim.Adam.__init__.__code__.co_argcount]
+        parsed_arguments={ key: value for key,value in self.hparams.items() if key in adam_params}
+        self.optimizer=torch.optim.Adam(self.parameters(), **parsed_arguments)
 
-        pass
 
         ########################################################################
         #                           END OF YOUR CODE                           #

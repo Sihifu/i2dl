@@ -31,14 +31,13 @@ def checkLayers(model):
     '''
 
     forbidden_layers = [torch.nn.modules.conv.Conv2d]
-
-    for key, module in model.encoder._modules.items():
-        for i in range(len(module)):
-            if type(module[i]) == forbidden_layers:
-                print(
-                    "Please don't use convolutions! For now, only use layers that have been already covered in the lecture!")
-                return False
-
+    msg="Please don't use convolutions! For now, only use layers that have been already covered in the lecture!"
+    for module in model.encoder.modules():
+        if len(list(module.children())) != 0:
+            continue
+        if type(module) == forbidden_layers:
+            print(msg)
+            return False
     return True
 
 
