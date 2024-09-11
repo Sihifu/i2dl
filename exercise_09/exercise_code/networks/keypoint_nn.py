@@ -3,6 +3,52 @@
 import torch
 import torch.nn as nn
 
+class TransformerBlock(nn.Module):
+    def __init__(self, hparams):
+        super().__init__()
+        self.hparams=hparams
+        n_hidden=hparams["n_hidden"]
+        self.ff=nn.Sequential(nn.LayerNorm(n_hidden),nn.Linear(n_hidden,4 *n_hidden),nn.GELU(), \
+                              nn.Linear(4*n_hidden,n_hidden),nn.Dropout(p=0.6))
+
+    def forward(self, x):
+        # Shortcut connection for attention block
+        shortcut = x
+        x = self.ff(x)
+        x = x + shortcut  # Add the original input back
+        return x
+
+class MLP(nn.Module):
+    def __init__(self, hparams):
+        super().__init__()
+        self.hparams=hparams
+        n_hidden=hparams["n_hidden"]
+        self.ff=nn.Sequential(nn.Linear(6400, n_hidden),nn.ELU(), nn.Dropout(p=0.5),
+                              nn.Linear(n_hidden, 30))
+
+    def forward(self, x):
+        x = self.ff(x)
+        return x
+class ConvLayer(nn.Module):
+    def __init__(self):
+        super().__init__()
+        num_conv_layer=4
+        self.conv_layers=[nn.Conv2d(in_channels=2**(3+num_conv_layer-k), out_channels=2**(4+num_conv_layer-k), \
+                               kernel_size=(k+1,k+1)) for k in range(num_conv_layer-1)]
+        self.conv_layers.append(nn.Conv2d(in_channels=1, out_channels=2**(5), \
+                               kernel_size=(num_conv_layer,num_conv_layer)))
+        self.conv_layers[::-1]=self.conv_layers
+        self.max_pool_layers=[nn.MaxPool2d(kernel_size=(2,2),stride=2) for _ in range(num_conv_layer)]
+        self.dropout_layers=[nn.Dropout2d(p=torch.max(torch.tensor([0.6,(1+k)*1e-1])).item()) for k in range(num_conv_layer)]
+        self.activation_layers=[nn.ELU() for _ in range(num_conv_layer)]
+        self.conv_ff=[nn.Sequential(a,b,c,d) for a,b,c,d in \
+                      zip(self.conv_layers,self.activation_layers,self.max_pool_layers,self.dropout_layers)]
+        self.conv_ff=nn.Sequential(*self.conv_ff)
+        self.conv_ff=nn.Sequential(self.conv_ff,nn.Flatten(start_dim=-3, end_dim=-1))
+
+    def forward(self, x):
+        return self.conv_ff(x)
+
 class KeypointModel(nn.Module):
     """Facial keypoint detection model"""
     def __init__(self, hparams):
@@ -32,10 +78,14 @@ class KeypointModel(nn.Module):
         # You're going probably try different architecutres, and that will     #
         # allow you to be quick and flexible.                                  #
         ########################################################################
-        
-
-        pass
-
+        n_hidden=hparams["n_hidden"]
+        self.conv_ff=ConvLayer()
+        #self.mlp=MLP(hparams)
+        self.trf_ll=[TransformerBlock(hparams) for _ in range(hparams["num_trf_ll"])]
+        self.trf_ll=nn.Sequential(*self.trf_ll)
+        self.model=nn.Sequential(self.conv_ff,nn.Linear(6400,n_hidden),self.trf_ll,nn.Linear(n_hidden,2*15))
+        #self.model=nn.Sequential(self.conv_ff,self.mlp)
+        self.set_optimizer()
         ########################################################################
         #                           END OF YOUR CODE                           #
         ########################################################################
@@ -53,12 +103,24 @@ class KeypointModel(nn.Module):
         ########################################################################
 
 
-        pass
+        out=self.model(x)
 
         ########################################################################
         #                           END OF YOUR CODE                           #
         ########################################################################
-        return x
+        return out
+
+    def set_optimizer(self):
+
+        self.optimizer = None
+        ########################################################################
+        # TODO: Define your optimizer.                                         #
+        ########################################################################
+
+        optimizer=torch.optim.Adam
+        optim_params = optimizer.__init__.__code__.co_varnames[:optimizer.__init__.__code__.co_argcount]
+        parsed_arguments={ key: value for key,value in self.hparams.items() if key in optim_params}
+        self.optimizer=optimizer(self.parameters(), **parsed_arguments)
 
 
 class DummyKeypointModel(nn.Module):

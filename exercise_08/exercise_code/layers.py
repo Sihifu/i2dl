@@ -110,16 +110,13 @@ def batchnorm_backward(dout, cache):
     ########################################################################
     out, x_norm, beta, gamma, x_minus_mean, ivar, sqrtvar, var, eps = cache
     N=x_norm.shape[0]
-    d_x_minus_mu=dout*+np.sum(dout,axis=0).reshape((1,-1))*(-1/N)
-    denom=ivar.reshape((1,-1))**2
-    term2=x_minus_mean*ivar.reshape((1,-1))*2*d_x_minus_mu
 
-    dx=gamma*((d_x_minus_mu*sqrtvar.reshape((1,-1))-term2)/denom)
+    dxhat = dout * gamma
 
+    dx = ivar * (dxhat - np.mean(dxhat, axis=0)- (1. / N) *(x_norm*np.sum(dxhat*x_norm, axis=0)))
     dgamma = np.sum(x_norm * dout,axis=0)
     dbeta = np.sum(dout,axis=0)
 
-    
 
     ########################################################################
     #                           END OF YOUR CODE                           #
@@ -193,7 +190,10 @@ def dropout_forward(x, dropout_param):
         # Store the dropout mask in the mask variable.                          #
         ########################################################################
 
-        pass
+        P=np.random.uniform(size=x.shape)
+        mask=P<p
+        out=np.copy(x)
+        out[mask==1]=0.0
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -203,7 +203,7 @@ def dropout_forward(x, dropout_param):
         # TODO: Implement the test phase forward pass for inverted dropout.    #
         ########################################################################
 
-        pass
+        out=x
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -232,7 +232,8 @@ def dropout_backward(dout, cache):
         # TODO: Implement the training phase backward pass for inverted dropout. #
         ########################################################################
 
-        pass
+        dx=np.copy(dout)
+        dx[mask==1]=0
 
         ########################################################################
         #                           END OF YOUR CODE                           #
