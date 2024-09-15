@@ -1,7 +1,7 @@
 """SegmentationNN"""
 import torch
 import torch.nn as nn
-
+from torchvision.models import resnet18, ResNet18_Weights
 class BasicBlock(nn.Module):
     def __init__(self, num_input_channels, hparams, downsample=False):
         super().__init__()
@@ -169,6 +169,9 @@ class SegmentationNN(nn.Module):
         self.up_layer3 = nn.Sequential(BasicBlockUp(64,hp,upsample=True),BasicBlockUp(32,hp,upsample=False))
 
         self.outputlayer= nn.Sequential(nn.ConvTranspose2d(64+32, 3, kernel_size=6, stride=2, padding=2, bias=False),nn.Conv2d(3, num_classes, kernel_size=1))
+        self.load_resnet_weights()
+        self.set_optimizer()
+        self.set_optimizer_scheduler()
         #######################################################################
         #                           END OF YOUR CODE                          #
         #######################################################################
@@ -221,12 +224,26 @@ class SegmentationNN(nn.Module):
 
         return out
 
-    # @property
-    # def is_cuda(self):
-    #     """
-    #     Check if model parameters are allocated on the GPU.
-    #     """
-    #     return next(self.parameters()).is_cuda
+    def reset_for_training(self, hp=None):
+        self.current_weights=self.state_dict()
+        if hp:
+            self.__init__(hp)
+        else:
+            self.__init__(self.hp)
+        self.load_state_dict(self.current_weights)
+
+
+    def set_optimizer(self):
+        self.optimizer=self.hp.get("optimizer",torch.optim.Adam)
+        optim_params = self.optimizer.__init__.__code__.co_varnames[:self.optimizer.__init__.__code__.co_argcount]
+        parsed_arguments={ key: value for key,value in self.hp.items() if key in optim_params}
+        self.optimizer=self.optimizer(self.parameters(), **parsed_arguments)
+
+    def set_optimizer_scheduler(self):
+        self.scheduler=torch.optim.lr_scheduler.StepLR
+        scheduler_params = torch.optim.lr_scheduler.StepLR.__init__.__code__.co_varnames[:torch.optim.lr_scheduler.StepLR.__init__.__code__.co_argcount]
+        parsed_arguments={ key: value for key,value in self.hp.items() if key in scheduler_params}
+        self.optimizer_scheduler=torch.optim.lr_scheduler.StepLR(self.optimizer ,**parsed_arguments)
 
     def save(self, path):
         """
@@ -238,8 +255,78 @@ class SegmentationNN(nn.Module):
         """
         print('Saving model... %s' % path)
         torch.save(self, path)
-
+    
+    def load_resnet_weights(self):
+        res=resnet18(weights=ResNet18_Weights.DEFAULT)
+        leaves_res=self.get_leaves(res)
+        leaves_module=self.get_leaves(self)
         
+        i=0
+        while True:
+            if self.compare_leaves(leaves_module[i],leaves_res[i]):
+                leaves_module[i].load_state_dict(leaves_res[i].state_dict())
+                i+=1
+            else: 
+                break
+
+    def get_leaves(self,module):
+        leaves=[]
+        def _get_leaves(module,leaves):
+            for child in module.children():
+                if len(list(child.children())) == 0:  # No sub-modules, so it's a leaf
+                    if any(param.requires_grad for param in child.parameters()):
+                        leaves.append(child)
+                else:
+                    _get_leaves(child,leaves)
+            return leaves  
+        return _get_leaves(module,leaves)
+
+    def compare_leaves(self, module1, module2):
+        return str(module1) == str(module2)
+    
+
+class Autoencoder(nn.Module):
+
+    def __init__(self, hparams, encoder):
+        super().__init__()
+        # set hyperparams
+        self.hp = hparams
+        # Define models
+        self.encoder = encoder
+        self.decoder = nn.Conv2d(23, 3, kernel_size=1)
+        self.device = hparams.get("device", torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+        self.set_optimizer()
+        self.set_optimizer_scheduler()
+
+    def forward(self, x):
+        reconstruction = None
+        ########################################################################
+        # TODO: Feed the input image to your encoder to generate the latent    #
+        #  vector. Then decode the latent vector and get your reconstruction   #
+        #  of the input.                                                       #
+        ########################################################################
+
+        latent=self.encoder(x)
+        reconstruction=self.decoder(latent)
+
+        ########################################################################
+        #                           END OF YOUR CODE                           #
+        ########################################################################
+        return reconstruction
+    
+    def set_optimizer(self):
+        self.optimizer=self.hp.get("optimizer",torch.optim.Adam)
+        optim_params = self.optimizer.__init__.__code__.co_varnames[:self.optimizer.__init__.__code__.co_argcount]
+        parsed_arguments={ key: value for key,value in self.hp.items() if key in optim_params}
+        self.optimizer=self.optimizer(self.parameters(), **parsed_arguments)
+
+    def set_optimizer_scheduler(self):
+        self.scheduler=torch.optim.lr_scheduler.StepLR
+        scheduler_params = torch.optim.lr_scheduler.StepLR.__init__.__code__.co_varnames[:torch.optim.lr_scheduler.StepLR.__init__.__code__.co_argcount]
+        parsed_arguments={ key: value for key,value in self.hp.items() if key in scheduler_params}
+        self.optimizer_scheduler=torch.optim.lr_scheduler.StepLR(self.optimizer ,**parsed_arguments)
+
+
 class DummySegmentationModel(nn.Module):
 
     def __init__(self, target_image):
@@ -260,4 +347,4 @@ class DummySegmentationModel(nn.Module):
 
 if __name__ == "__main__":
     from torchinfo import summary
-    summary(SegmentationNN(), (1, 3, 240, 240), device="cpu")
+    summary(SegmentationNN(hp={"dropout_percentage":0.5}), (1, 3, 240, 240), device="cpu")
