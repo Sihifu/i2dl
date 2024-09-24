@@ -4,4 +4,6 @@ datasets/
 *.zip
 *.model
 output/
-exercise_10/models_history
+exercise_10/models_history/
+
+
