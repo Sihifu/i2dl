@@ -148,9 +148,23 @@ class Trainer:
         #        Inspect the inputs of the SmoothCrossEntropy                  #
         #        Make sure to pass all masks to the model!                     #
         ########################################################################
+        """
+        import sys
+        sys.path.append('../excercise_11')
+        from exercise_code.data.tokenizer import load_pretrained_fast
+        tokenizer=load_pretrained_fast()
+        """
+        encoder_inputs, encoder_mask, decoder_inputs, decoder_mask, labels, label_mask, label_length = batch.values()
+        encoder_inputs=encoder_inputs.to(self.device)
+        encoder_mask=encoder_mask.to(self.device)
+        decoder_inputs=decoder_inputs.to(self.device)
+        decoder_mask=decoder_mask.to(self.device)
+        labels=labels.to(self.device)
+        label_mask=label_mask.to(self.device)
+        label_length=label_length.to(self.device)
 
-
-        pass
+        outputs = self.model(encoder_inputs,decoder_inputs,encoder_mask,decoder_mask)
+        loss=self.loss_func(outputs, labels, label_mask, label_length)
 
         ########################################################################
         #                           END OF YOUR CODE                           #

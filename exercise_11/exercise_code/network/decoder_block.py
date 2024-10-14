@@ -47,8 +47,13 @@ class DecoderBlock(nn.Module):
         # Hint 9: Check out the pytorch layer norm module                      #
         ########################################################################
 
-
-        pass
+        self.causal_multi_head = MultiHeadAttention(d_model,d_k,d_v,n_heads)
+        self.layer_norm1 = torch.nn.LayerNorm(d_model)
+        self.cross_multi_head = MultiHeadAttention(d_model,d_k,d_v,n_heads)
+        self.layer_norm2 = torch.nn.LayerNorm(d_model)
+        self.ffn = FeedForwardNeuralNetwork(d_model,d_ff)
+        self.layer_norm3 = torch.nn.LayerNorm(d_model)
+        
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -91,8 +96,15 @@ class DecoderBlock(nn.Module):
         #         module                                                       #
         ########################################################################
 
-
-        pass
+        outputs=self.causal_multi_head(inputs,inputs,inputs,causal_mask)
+        outputs+=inputs
+        outputs=self.layer_norm1(outputs)
+        intermediate=outputs
+        outputs=self.cross_multi_head(outputs,context,context,pad_mask)
+        outputs+=intermediate
+        outputs=self.layer_norm2(outputs)
+        outputs=self.ffn(outputs)
+        outputs=self.layer_norm3(outputs)
 
         ########################################################################
         #                           END OF YOUR CODE                           #

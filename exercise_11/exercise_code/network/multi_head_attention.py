@@ -50,8 +50,13 @@ class MultiHeadAttention(nn.Module):
         #       - All linear layers should only be a weight without a bias!    #
         ########################################################################
 
-
-        pass
+        
+        self.weights_q = torch.nn.Linear(d_model,n_heads*d_k,bias=False)
+        self.weights_k = torch.nn.Linear(d_model,n_heads*d_k,bias=False)
+        self.weights_v = torch.nn.Linear(d_model,n_heads*d_v,bias=False)
+        self.attention = ScaledDotAttention(d_model)
+        self.project = torch.nn.Linear(n_heads*d_v,d_model,bias=False)
+        self.dropout = nn.Dropout(dropout)
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -112,8 +117,23 @@ class MultiHeadAttention(nn.Module):
         #       - Use unsqueeze() to add dimensions at the correct location    #
         ########################################################################
 
-
-        pass
+        q_out=self.weights_q(q)
+        q_out=torch.reshape(q_out,(batch_size, sequence_length_queries, self.n_heads,-1))
+        q_out=torch.transpose(q_out,-2,-3)
+        k_out=self.weights_k(k)
+        k_out=torch.reshape(k_out,(batch_size, sequence_length_keys, self.n_heads,-1))
+        k_out=torch.transpose(k_out,-2,-3)
+        v_out=self.weights_v(v)
+        v_out=torch.reshape(v_out,(batch_size, sequence_length_keys, self.n_heads,-1))
+        v_out=torch.transpose(v_out,-2,-3)
+        if mask is not None:
+            mask = mask.unsqueeze(1)
+        attention=self.attention(q_out,k_out,v_out,mask) 
+        #attention=torch.softmax(q_out@torch.transpose(k_out,-1,-2)/self.d_k**0.5,-1)@v_out
+        attention=torch.transpose(attention,-2,-3)
+        attention=torch.reshape(attention,(-1,sequence_length_queries,self.n_heads*self.d_v))
+        outputs=self.project(attention)
+        outputs=self.dropout(outputs)
 
         ########################################################################
         #                           END OF YOUR CODE                           #

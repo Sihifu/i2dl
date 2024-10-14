@@ -77,8 +77,11 @@ class Transformer(nn.Module):
         #          dimensions of the output layer! We will not need a bias!    #
         ########################################################################
 
-
-        pass
+        self.embedding = Embedding(vocab_size,self.d_model,max_length,dropout=self.dropout)
+        self.encoder = Encoder(**self.hparams)
+        self.decoder = Decoder(**self.hparams)
+        self.output_layer = torch.nn.Linear(self.d_model,vocab_size,bias=False)
+        
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -128,8 +131,11 @@ class Transformer(nn.Module):
         #           to figure out which masks to pass on!                      #
         ########################################################################
 
-
-        pass
+        encoder_embeddings=self.embedding(encoder_inputs)
+        encoder_output=self.encoder(encoder_embeddings,encoder_mask)
+        decoder_embeddings=self.embedding(decoder_inputs)
+        decoder_output=self.decoder(decoder_embeddings,encoder_output,decoder_mask,encoder_mask)
+        outputs=self.output_layer(decoder_output)
 
         ########################################################################
         #                           END OF YOUR CODE                           #

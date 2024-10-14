@@ -38,7 +38,9 @@ class Embedding(nn.Module):
         ########################################################################
 
 
-        pass
+        self.embedding=torch.nn.Embedding(num_embeddings=vocab_size,embedding_dim=d_model)
+        self.pos_encoding = positional_encoding(d_model, max_length)
+        self.dropout = nn.Dropout(dropout)
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -81,7 +83,9 @@ class Embedding(nn.Module):
         ########################################################################
 
 
-        pass
+        outputs=self.embedding(inputs)
+        outputs+=pos_encoding
+        outputs=self.dropout(outputs)
 
         ########################################################################
         #                           END OF YOUR CODE                           #

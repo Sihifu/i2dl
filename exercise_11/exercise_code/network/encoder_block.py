@@ -42,7 +42,10 @@ class EncoderBlock(nn.Module):
         ########################################################################
 
 
-        pass
+        self.multi_head = MultiHeadAttention(d_model, d_k, d_v, n_heads)
+        self.layer_norm1 = torch.nn.LayerNorm(d_model)
+        self.ffn = FeedForwardNeuralNetwork(d_model, d_ff)
+        self.layer_norm2 = torch.nn.LayerNorm(d_model)
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -73,8 +76,11 @@ class EncoderBlock(nn.Module):
         #         the pad_mask for now!                                        #
         ########################################################################
 
-
-        pass
+        outputs  = self.multi_head(inputs,inputs,inputs,pad_mask)
+        outputs  += inputs
+        outputs  = self.layer_norm1(outputs)
+        outputs  = self.ffn(outputs)
+        outputs  = self.layer_norm2(outputs)
 
         ########################################################################
         #                           END OF YOUR CODE                           #

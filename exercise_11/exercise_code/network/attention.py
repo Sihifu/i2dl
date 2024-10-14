@@ -26,7 +26,8 @@ class ScaledDotAttention(nn.Module):
         ########################################################################
 
 
-        pass
+        self.softmax=torch.nn.Softmax(dim=-1)
+        self.dropout=nn.Dropout(dropout)
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -79,8 +80,12 @@ class ScaledDotAttention(nn.Module):
         #       - Have a look at Tensor.masked_fill_() or use torch.where()    #
         ########################################################################
 
-
-        pass
+        intermediate_result=q@torch.transpose(k,-1,-2)/k.shape[-1]**0.5
+        if mask is not None:
+            intermediate_result.masked_fill_(~mask,-torch.inf)
+        scores=self.softmax(intermediate_result)
+        scores=self.dropout(scores)
+        outputs=scores@v
 
         ########################################################################
         #                           END OF YOUR CODE                           #

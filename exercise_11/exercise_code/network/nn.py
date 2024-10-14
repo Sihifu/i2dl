@@ -28,8 +28,10 @@ class FeedForwardNeuralNetwork(nn.Module):
         #                                                                      #
         ########################################################################
 
-
-        pass
+        self.linear_1 = torch.nn.Linear(d_model, d_ff)
+        self.relu =torch.nn.ReLU()
+        self.linear_2 = torch.nn.Linear(d_ff, d_model)
+        self.dropout = nn.Dropout(dropout)
 
         ########################################################################
         #                           END OF YOUR CODE                           #
@@ -56,7 +58,11 @@ class FeedForwardNeuralNetwork(nn.Module):
         ########################################################################
 
 
-        pass
+        outputs=self.linear_1(inputs)
+        outputs=self.relu(outputs)
+        outputs=self.linear_2(outputs)
+        outputs+=inputs
+        outputs=self.dropout(outputs)
 
         ########################################################################
         #                           END OF YOUR CODE                           #
